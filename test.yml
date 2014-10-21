@@ -1,0 +1,15 @@
+---
+
+- hosts: all
+  sudo: yes
+  roles:
+    - franklinkim.sftp
+  vars:
+    sftp_users_group: ftp
+    sftp_users:
+      - username: foobar
+        name: Foo Bar
+        password: '$1$somesalt$jezmI5TSY7mVTzHLgsK5L.'
+        mount_points:
+          - name: tmp
+            path: /tmp

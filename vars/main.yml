@@ -1,0 +1,4 @@
+---
+
+sftp_placeholder_start: '# Ansible managed start #'
+sftp_placeholder_end: '# Ansible managed end #'

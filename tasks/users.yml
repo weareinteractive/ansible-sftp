@@ -1,0 +1,169 @@
+---
+
+- name: Adding users
+  user: >
+    name={{ item.username }}
+    comment={{ item.username|default(item.username) }}
+    home={{ item.home|default(sftp_users_home ~ '/' ~ item.username ) }}
+    group={{ item.group|default(sftp_users_group) }}
+    groups={{ item.groups|default(sftp_users_groups)|join(',') }}
+    password={{ item.password }}
+    shell=/usr/sbin/nologin
+  with_items: sftp_users
+  tags:
+    - networking
+    - sftp
+    - users
+
+- name: Setting user's home permission
+  file: >
+    dest={{ item.home|default(sftp_users_home ~ '/' ~ item.username) }}
+    state=directory
+    owner=root
+    group=root
+    mode=0755
+  with_items: sftp_users
+  tags:
+    - networking
+    - sftp
+    - users
+
+- name: Adding user's ssh folder
+  file: >
+    dest={{ item.home|default(sftp_users_home ~ '/' ~ item.username) }}/.ssh
+    owner={{ item.username }}
+    group={{ item.group|default(sftp_users_group) }}
+    state=directory
+    mode=0700
+  with_items: sftp_users
+  tags:
+    - networking
+    - sftp
+    - users
+
+- name: Adding authorized keys
+  template: >
+    src=home-user-ssh-authorized_keys.j2
+    dest={{ item.home|default(sftp_users_home ~ '/' ~ item.username) }}/.ssh/authorized_keys
+    owner={{ item.username }}
+    group={{ item.group|default(sftp_users_group) }}
+    mode=0600
+  with_items: sftp_users
+  tags:
+    - networking
+    - sftp
+    - users
+
+- name: Adding user's chroot folder
+  file: >
+    dest={{ item.home|default(sftp_users_home ~ '/' ~ item.username) }}/chroot
+    state=directory
+    owner=root
+    group={{ item.group|default(sftp_users_group) }}
+    mode=0755
+  with_items: sftp_users
+  tags:
+    - networking
+    - sftp
+    - users
+
+- name: Adding user's folders
+  file: >
+    dest={{ item[0].home|default(sftp_users_home ~ '/' ~ item[0].username) }}/chroot/{{ item[1] }}
+    state=directory
+    owner={{ item[0].username }}
+    group={{ item[0].group|default(sftp_users_group) }}
+    mode=0775
+  with_nested:
+    - sftp_users
+    - sftp_users_folders
+  tags:
+    - networking
+    - sftp
+    - users
+
+- name: Configuring user's sshd
+  lineinfile: >
+    dest=/etc/ssh/sshd_config
+    line="{{ 'Match USER ' ~ item.username ~ '\n\tAllowTcpForwarding no\n\tForceCommand internal-sftp\n\tPasswordAuthentication yes\n\tChrootDirectory %h/chroot' }}"
+    regexp="^Match USER {{ item.username }}"
+    validate="/usr/sbin/sshd -T -f %s"
+    insertbefore="^{{ sftp_placeholder_end }}"
+    state=present
+  notify: restart ssh
+  with_items: sftp_users
+  tags:
+    - networking
+    - sftp
+    - users
+
+- name: Clearing fstab config
+  command: >
+    sed -in '/{{ sftp_placeholder_start }}/,/{{ sftp_placeholder_end }}/d' /etc/fstab
+  tags:
+    - networking
+    - sftp
+    - config
+
+- name: Adding fstab config placeholder
+  lineinfile: >
+    state=present
+    dest=/etc/fstab
+    line="{{ sftp_placeholder_start ~ '\n' ~ sftp_placeholder_end }}"
+  tags:
+    - networking
+    - sftp
+    - users
+
+- name: Adding mount point folder
+  file: >
+    dest={{ item.home|default(sftp_users_home ~ '/' ~ item.username) }}/chroot/mnt
+    state=directory
+    owner=root
+    group=root
+    mode=0755
+  with_items: sftp_users
+  tags:
+    - networking
+    - sftp
+    - users
+
+- name: Unmounting old folders
+  command: >
+    find {{ item.home|default(sftp_users_home ~ '/' ~ item.username) }}/chroot/mnt -maxdepth 1 -mindepth 1 -type d -exec umount {} \;
+  with_items: sftp_users
+  tags:
+    - networking
+    - sftp
+    - users
+
+- name: Adding mount point folders
+  file: >
+    dest={{ item.0.home|default(sftp_users_home ~ '/' ~ item.0.username) }}/chroot/mnt/{{ item.1.name }}
+    owner={{ item[0].username }}
+    group={{ item[0].group|default(sftp_users_group) }}
+    state=directory
+    mode=0775
+  with_subelements:
+    - sftp_users
+    - mount_points
+  tags:
+    - networking
+    - sftp
+    - users
+
+
+- name: Adding user's fstab
+  lineinfile: >
+    state=present
+    dest=/etc/fstab
+    line="{{ item.1.path }} {{ item.0.home|default(sftp_users_home ~ '/' ~ item.0.username) }}/chroot/mnt/{{ item.1.name }} none defaults,bind 0 0"
+    insertbefore="^{{ sftp_placeholder_end }}"
+  notify: mount all
+  with_subelements:
+    - sftp_users
+    - mount_points
+  tags:
+    - networking
+    - sftp
+    - users

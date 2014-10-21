@@ -1,0 +1,6 @@
+---
+# For more information about role dependencies see:
+# http://www.ansibleworks.com/docs/playbooks_roles.html#role-dependencies
+#
+dependencies:
+  - franklinkim.ssh
