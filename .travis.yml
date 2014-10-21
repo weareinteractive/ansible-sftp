@@ -8,6 +8,7 @@ before_install:
 install:
   - pip install ansible
   - ansible-galaxy install franklinkim.ssh
+  - git clone https://github.com/bfmartin/ansible-sshknownhosts.git library/sshknownhosts
 script:
   - echo localhost > inventory
   - ln -s ansible-sftp ../franklinkim.sftp
